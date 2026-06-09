@@ -1,0 +1,1079 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CostOp Intelligence Agent (created by amitml) - One-click deployment for Bedrock cost monitoring and investigation'
+
+Parameters:
+  AdminEmail:
+    Type: String
+    Description: Email for login credentials and alert notifications
+    AllowedPattern: '.+@.+'
+
+  DefaultModel:
+    Type: String
+    Default: Sonnet4.6
+    AllowedValues: [Sonnet4.6, Sonnet4.5, Haiku4.5]
+    Description: 'Sonnet 4.6 = latest/best. Sonnet 4.5 = proven. Haiku 4.5 = faster/cheaper. Ignored if CustomModelId is set.'
+
+  CustomModelId:
+    Type: String
+    Default: ''
+    Description: 'Optional: override with any Bedrock model ID. Ensure the model is enabled in your account and region.'
+
+  EnableTokenAlarm:
+    Type: String
+    Default: 'Yes'
+    AllowedValues: ['Yes', 'No']
+  TokenAlarmThreshold:
+    Type: Number
+    Default: 200000
+    Description: Input tokens per 5-min window
+
+  EnableRPMAlarm:
+    Type: String
+    Default: 'Yes'
+    AllowedValues: ['Yes', 'No']
+  RPMAlarmThreshold:
+    Type: Number
+    Default: 100
+    Description: Requests per minute
+
+  TPMAlarmThreshold:
+    Type: Number
+    Default: 80
+    Description: TPM quota usage percentage
+
+  ThrottleAlarmThreshold:
+    Type: Number
+    Default: 5
+    Description: Throttled requests per minute
+
+  ErrorAlarmThreshold:
+    Type: Number
+    Default: 10
+    Description: Client errors per 5 minutes
+
+  EnableTPMAlarm:
+    Type: String
+    Default: 'Yes'
+    AllowedValues: ['Yes', 'No']
+
+  EnableThrottleAlarm:
+    Type: String
+    Default: 'Yes'
+    AllowedValues: ['Yes', 'No']
+
+  EnableErrorAlarm:
+    Type: String
+    Default: 'Yes'
+    AllowedValues: ['Yes', 'No']
+
+  MonthlyBudgetLimit:
+    Type: Number
+    Default: 100
+    Description: Monthly budget in USD (0 = no budget)
+
+  EnableCostAnomalyDetection:
+    Type: String
+    Default: 'Yes'
+    AllowedValues: ['Yes', 'No']
+
+  MemoryRetentionDays:
+    Type: Number
+    Default: 30
+    Description: "Days to keep conversation history (7-365)"
+
+  EnableInvocationLogging:
+    Type: String
+    Default: 'Yes'
+    AllowedValues: ['Yes', 'No']
+
+  # === EXISTING RESOURCES (provide if you have them, or select CREATE) ===
+  InvocationLogGroup:
+    Type: String
+    Default: ''
+    Description: "Existing log group for Bedrock invocation logs (e.g. /aws/bedrock/modelinvocations). Leave empty to create one."
+
+  SNSTopicArn:
+    Type: String
+    Default: ''
+    Description: "Existing SNS topic ARN for alerts (e.g. arn:aws:sns:us-east-1:123456789012:my-alerts). Leave empty to create one."
+
+  CloudWatchAlarms:
+    Type: String
+    Default: ''
+    AllowedValues: ['', 'EXISTING']
+    Description: "Leave empty to create alarms. Enter EXISTING if you already have Bedrock alarms."
+
+  EnableSlack:
+    Type: String
+    Default: 'No'
+    AllowedValues: ['Yes', 'No']
+  SlackBotToken:
+    Type: String
+    Default: ''
+    NoEcho: true
+  SlackSigningSecret:
+    Type: String
+    Default: ''
+    NoEcho: true
+  SlackChannel:
+    Type: String
+    Default: ''
+
+Conditions:
+  CreateTokenAlarm: !And [!Equals [!Ref EnableTokenAlarm, 'Yes'], !Equals [!Ref CloudWatchAlarms, '']]
+  CreateRPMAlarm: !And [!Equals [!Ref EnableRPMAlarm, 'Yes'], !Equals [!Ref CloudWatchAlarms, '']]
+  CreateTPMAlarm: !And [!Equals [!Ref EnableTPMAlarm, 'Yes'], !Equals [!Ref CloudWatchAlarms, '']]
+  CreateThrottleAlarm: !And [!Equals [!Ref EnableThrottleAlarm, 'Yes'], !Equals [!Ref CloudWatchAlarms, '']]
+  CreateErrorAlarm: !And [!Equals [!Ref EnableErrorAlarm, 'Yes'], !Equals [!Ref CloudWatchAlarms, '']]
+  CreateBudget: !Not [!Equals [!Ref MonthlyBudgetLimit, 0]]
+  CreateAnomalyDetection: !Equals [!Ref EnableCostAnomalyDetection, 'Yes']
+  EnableLogging: !Equals [!Ref EnableInvocationLogging, 'Yes']
+  CreateLogGroup: !Equals [!Ref InvocationLogGroup, '']
+  CreateSNSTopic: !Equals [!Ref SNSTopicArn, '']
+  SlackEnabled: !Equals [!Ref EnableSlack, 'Yes']
+  UseSonnet: !Equals [!Ref DefaultModel, 'Sonnet4.5']
+  UseHaiku: !Equals [!Ref DefaultModel, 'Haiku4.5']
+  UseCustomModel: !Not [!Equals [!Ref CustomModelId, '']]
+
+Resources:
+  # ============================================
+  # SNS Topic (create if empty, use existing if provided)
+  # ============================================
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: CreateSNSTopic
+    Properties:
+      TopicName: !Sub '${AWS::StackName}-alerts'
+
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: CreateSNSTopic
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AdminEmail
+
+  # ============================================
+  # DynamoDB Tables
+  # ============================================
+  PatternsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-patterns'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pattern_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pattern_id
+          KeyType: HASH
+
+  InvestigationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-investigations'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: investigation_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: investigation_id
+          KeyType: HASH
+
+  TopologyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-topology'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: resource_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: resource_id
+          KeyType: HASH
+
+  # ============================================
+  # IAM Role for AgentCore Runtime
+  # ============================================
+  RuntimeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-RuntimeRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AgentPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: Bedrock
+                Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream, bedrock:ConverseStream, bedrock:Converse]
+                Resource: '*'
+              - Sid: CostExplorer
+                Effect: Allow
+                Action: [ce:GetCostAndUsage, ce:GetCostForecast, ce:GetAnomalies]
+                Resource: '*'
+              - Sid: CloudTrail
+                Effect: Allow
+                Action: [cloudtrail:LookupEvents]
+                Resource: '*'
+              - Sid: CloudWatch
+                Effect: Allow
+                Action: [cloudwatch:GetMetricData, cloudwatch:DescribeAlarms, logs:StartQuery, logs:GetQueryResults, logs:DescribeLogGroups, logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: '*'
+              - Sid: DynamoDB
+                Effect: Allow
+                Action: [dynamodb:PutItem, dynamodb:GetItem, dynamodb:Scan, dynamodb:Query]
+                Resource:
+                  - !GetAtt PatternsTable.Arn
+                  - !GetAtt InvestigationsTable.Arn
+                  - !GetAtt TopologyTable.Arn
+              - Sid: SNS
+                Effect: Allow
+                Action: [sns:Publish, sns:ListSubscriptionsByTopic]
+                Resource: !Ref AlertTopic
+              - Sid: Budgets
+                Effect: Allow
+                Action: [budgets:DescribeBudgets, budgets:CreateBudget]
+                Resource: '*'
+              - Sid: ServiceQuotas
+                Effect: Allow
+                Action: [servicequotas:ListServiceQuotas, servicequotas:GetServiceQuota, servicequotas:RequestServiceQuotaIncrease]
+                Resource: '*'
+              - Sid: Lambda
+                Effect: Allow
+                Action: [lambda:PutFunctionConcurrency]
+                Resource: '*'
+              - Sid: STS
+                Effect: Allow
+                Action: [sts:GetCallerIdentity]
+                Resource: '*'
+              - Sid: ReadOnlyInvestigation
+                Effect: Allow
+                Action:
+                  - 'bedrock:Get*'
+                  - 'bedrock:List*'
+                  - 'bedrock-agentcore:Get*'
+                  - 'bedrock-agentcore:List*'
+                  - 'bedrock-agentcore-control:GetAgentRuntime'
+                  - 'bedrock-agentcore-control:ListAgentRuntimes'
+                  - 'cloudformation:Describe*'
+                  - 'cloudformation:List*'
+                  - 'events:List*'
+                  - 'events:Describe*'
+                  - 'iam:GetRole'
+                  - 'iam:ListRoleTags'
+                  - 'tag:GetResources'
+                  - 'lambda:List*'
+                  - 'lambda:GetFunction'
+                  - 'lambda:GetFunctionConfiguration'
+                  - 'ec2:Describe*'
+                  - 'ecs:List*'
+                  - 'ecs:Describe*'
+                  - 'rds:Describe*'
+                  - 's3:ListAllMyBuckets'
+                  - 'states:List*'
+                  - 'states:DescribeStateMachine'
+                  - 'apigateway:GET'
+                  - 'sagemaker:List*'
+                  - 'support:CreateCase'
+                  - 'support:DescribeTrustedAdvisorChecks'
+                  - 'cloudwatch:DescribeAlarmHistory'
+                  - 'cloudwatch:ListMetrics'
+                  - 'logs:DescribeLogStreams'
+                Resource: '*'
+              - Sid: ECR
+                Effect: Allow
+                Action: [ecr-public:GetAuthorizationToken, ecr:GetAuthorizationToken, ecr:BatchGetImage, ecr:GetDownloadUrlForLayer]
+                Resource: '*'
+              - Sid: AgentCore
+                Effect: Allow
+                Action: [bedrock-agentcore:CreateEvent, bedrock-agentcore:GetLastKTurns, bedrock-agentcore:GetMemory, bedrock-agentcore:ListEvents]
+                Resource: '*'
+
+  # ============================================
+  # ECR Private Repo + CodeBuild (copies public image to private)
+  # ============================================
+  AgentECR:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Delete
+    Properties:
+      ImageTagMutability: MUTABLE
+      LifecyclePolicy:
+        LifecyclePolicyText: '{"rules":[{"rulePriority":1,"description":"Keep 3","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":3},"action":{"type":"expire"}}]}'
+
+  ImageBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: codebuild.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BuildPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [ecr:GetAuthorizationToken]
+                Resource: '*'
+              - Effect: Allow
+                Action: [ecr:BatchCheckLayerAvailability, ecr:GetDownloadUrlForLayer, ecr:BatchGetImage, ecr:PutImage, ecr:InitiateLayerUpload, ecr:UploadLayerPart, ecr:CompleteLayerUpload]
+                Resource: !GetAtt AgentECR.Arn
+              - Effect: Allow
+                Action: [ecr-public:GetAuthorizationToken, sts:GetServiceBearerToken]
+                Resource: '*'
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: '*'
+
+  ImageBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${AWS::StackName}-image-copy'
+      ServiceRole: !GetAtt ImageBuildRole.Arn
+      Environment:
+        Type: ARM_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-aarch64-standard:3.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_REPO
+            Value: !GetAtt AgentECR.RepositoryUri
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref AWS::AccountId
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - aws ecr get-login-password | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+                - aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+            build:
+              commands:
+                - docker pull public.ecr.aws/y3a7j1y9/amitml/costop-agent:latest
+                - docker tag public.ecr.aws/y3a7j1y9/amitml/costop-agent:latest $ECR_REPO:latest
+                - docker push $ECR_REPO:latest
+      Artifacts:
+        Type: NO_ARTIFACTS
+      TimeoutInMinutes: 10
+
+  BuildTriggerLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CodeBuild
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [codebuild:StartBuild, codebuild:BatchGetBuilds]
+                Resource: !GetAtt ImageBuildProject.Arn
+
+  BuildTriggerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 600
+      Role: !GetAtt BuildTriggerLambdaRole.Arn
+      Code:
+        ZipFile: |
+          import boto3, json, time, urllib.request
+          def send_response(event, context, status, data={}):
+              body = json.dumps({'Status': status, 'Reason': str(data), 'PhysicalResourceId': event.get('PhysicalResourceId', context.log_stream_name), 'StackId': event['StackId'], 'RequestId': event['RequestId'], 'LogicalResourceId': event['LogicalResourceId'], 'Data': data})
+              urllib.request.urlopen(urllib.request.Request(event['ResponseURL'], data=body.encode(), headers={'Content-Type': ''}, method='PUT'))
+          def handler(event, context):
+              if event['RequestType'] == 'Delete':
+                  send_response(event, context, 'SUCCESS')
+                  return
+              try:
+                  cb = boto3.client('codebuild')
+                  build = cb.start_build(projectName=event['ResourceProperties']['ProjectName'])
+                  build_id = build['build']['id']
+                  for _ in range(60):
+                      time.sleep(10)
+                      result = cb.batch_get_builds(ids=[build_id])
+                      status = result['builds'][0]['buildStatus']
+                      if status == 'SUCCEEDED':
+                          send_response(event, context, 'SUCCESS', {'BuildId': build_id})
+                          return
+                      elif status in ('FAILED', 'FAULT', 'STOPPED', 'TIMED_OUT'):
+                          send_response(event, context, 'FAILED', {'Error': status})
+                          return
+                  send_response(event, context, 'FAILED', {'Error': 'Timeout'})
+              except Exception as e:
+                  send_response(event, context, 'FAILED', {'Error': str(e)})
+
+  ImageBuildTrigger:
+    Type: Custom::ImageBuild
+    Properties:
+      ServiceToken: !GetAtt BuildTriggerLambda.Arn
+      ProjectName: !Ref ImageBuildProject
+      Timestamp: !Ref AWS::StackName
+
+  # ============================================
+  # AgentCore Memory
+  # ============================================
+  MemoryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: bedrock-agentcore.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: MemoryPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [bedrock-agentcore:CreateEvent, bedrock-agentcore:GetLastKTurns, bedrock-agentcore:ListEvents]
+                Resource: '*' 
+
+  AgentMemory:
+    Type: AWS::BedrockAgentCore::Memory
+    Properties:
+      Name: costop_memory
+      Description: CostOp agent conversation memory
+      EventExpiryDuration: !Ref MemoryRetentionDays
+      MemoryExecutionRoleArn: !GetAtt MemoryRole.Arn
+
+  # ============================================
+  # AgentCore Runtime
+  # ============================================
+  AgentRuntime:
+    Type: AWS::BedrockAgentCore::Runtime
+    DependsOn: ImageBuildTrigger
+    Properties:
+      AgentRuntimeName: costop_runtime
+      Description: CostOp Intelligence Agent
+      RoleArn: !GetAtt RuntimeRole.Arn
+      AgentRuntimeArtifact:
+        ContainerConfiguration:
+          ContainerUri: !Sub '${AgentECR.RepositoryUri}:latest'
+      NetworkConfiguration:
+        NetworkMode: PUBLIC
+      EnvironmentVariables:
+        MEMORY_ID: !GetAtt AgentMemory.MemoryId
+        MODEL_ID: !If [UseCustomModel, !Ref CustomModelId, !If [UseHaiku, 'us.anthropic.claude-haiku-4-5-20251001-v1:0', !If [UseSonnet, 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', 'us.anthropic.claude-sonnet-4-6']]]
+        AWS_REGION: !Ref AWS::Region
+        SNS_TOPIC_ARN: !Ref AlertTopic
+        PATTERNS_TABLE: !Ref PatternsTable
+        INVESTIGATIONS_TABLE: !Ref InvestigationsTable
+        TOPOLOGY_TABLE: !Ref TopologyTable
+
+  # ============================================
+  # CloudWatch Alarms (conditional)
+  # ============================================
+  TokenAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateTokenAlarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-TokenSpike'
+      Namespace: AWS/Bedrock
+      MetricName: InputTokenCount
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref TokenAlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  RPMAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateRPMAlarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-RPM-High'
+      Namespace: AWS/Bedrock
+      MetricName: Invocations
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: !Ref RPMAlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  TPMAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateTPMAlarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-TPM-QuotaUsage'
+      Namespace: AWS/Bedrock
+      MetricName: EstimatedTPMQuotaUsage
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: !Ref TPMAlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  ThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateThrottleAlarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-Throttles'
+      Namespace: AWS/Bedrock
+      MetricName: InvocationThrottles
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: !Ref ThrottleAlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  ErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateErrorAlarm
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-ErrorRate'
+      Namespace: AWS/Bedrock
+      MetricName: InvocationClientErrors
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: !Ref ErrorAlarmThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+  # ============================================
+  # EventBridge Rules → Bridge Lambda
+  # ============================================
+  AlarmTriggerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${AWS::StackName}-alarm-trigger'
+      State: ENABLED
+      EventPattern:
+        source: [aws.cloudwatch]
+        detail-type: [CloudWatch Alarm State Change]
+        detail:
+          state: {value: [ALARM]}
+      Targets:
+        - Id: bridge
+          Arn: !GetAtt BridgeLambda.Arn
+
+  BudgetTriggerRule:
+    Type: AWS::Events::Rule
+    Condition: CreateBudget
+    Properties:
+      Name: !Sub '${AWS::StackName}-budget-trigger'
+      State: ENABLED
+      EventPattern:
+        source: [aws.budgets]
+      Targets:
+        - Id: bridge
+          Arn: !GetAtt BridgeLambda.Arn
+
+  AnomalyTriggerRule:
+    Type: AWS::Events::Rule
+    Condition: CreateAnomalyDetection
+    Properties:
+      Name: !Sub '${AWS::StackName}-anomaly-trigger'
+      State: ENABLED
+      EventPattern:
+        source: [aws.ce]
+        detail-type: [Cost Anomaly Detection Alert]
+      Targets:
+        - Id: bridge
+          Arn: !GetAtt BridgeLambda.Arn
+
+  # ============================================
+  # Bridge Lambda (proactive investigations)
+  # ============================================
+  BridgeLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BridgePermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [bedrock-agentcore:InvokeAgentRuntime]
+                Resource:
+                  - !GetAtt AgentRuntime.AgentRuntimeArn
+                  - !Sub '${AgentRuntime.AgentRuntimeArn}/*'
+              - Effect: Allow
+                Action: [sns:Publish]
+                Resource: !Ref AlertTopic
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Scan]
+                Resource:
+                  - !GetAtt InvestigationsTable.Arn
+                  - !GetAtt PatternsTable.Arn
+              - Effect: Allow
+                Action: [secretsmanager:GetSecretValue]
+                Resource: '*'
+
+  BridgeLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-bridge'
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 120
+      MemorySize: 256
+      Role: !GetAtt BridgeLambdaRole.Arn
+      Environment:
+        Variables:
+          AGENT_RUNTIME_ARN: !GetAtt AgentRuntime.AgentRuntimeArn
+          SNS_TOPIC_ARN: !Ref AlertTopic
+          INVESTIGATIONS_TABLE: !Ref InvestigationsTable
+      Code:
+        ZipFile: |
+          import boto3, json, os, time
+          region = os.environ.get('AWS_REGION', 'us-east-1')
+          sns = boto3.client('sns', region_name=region)
+          ddb = boto3.resource('dynamodb', region_name=region)
+          AGENT_ARN = os.environ['AGENT_RUNTIME_ARN']
+          SNS_TOPIC = os.environ['SNS_TOPIC_ARN']
+          TABLE = os.environ['INVESTIGATIONS_TABLE']
+          COOLDOWN = 300
+
+          def is_recent(key):
+              try:
+                  table = ddb.Table(TABLE)
+                  item = table.get_item(Key={'investigation_id': f'dedup-{key}'}).get('Item')
+                  if not item: return False
+                  return (time.time() - float(item.get('last_triggered', 0))) < COOLDOWN
+              except: return False
+
+          def mark(key):
+              try: ddb.Table(TABLE).put_item(Item={'investigation_id': f'dedup-{key}', 'last_triggered': str(time.time()), 'timestamp': str(int(time.time()))})
+              except: pass
+
+          def handler(event, context):
+              source = event.get('source', '')
+              detail = event.get('detail', {})
+              if source == 'aws.cloudwatch':
+                  alarm = detail.get('alarmName', 'Unknown')
+                  if is_recent('_any_') or is_recent(alarm): return {'statusCode': 200, 'body': 'deduped'}
+                  mark(alarm); mark('_any_')
+                  prompt = f"CloudWatch alarm '{alarm}' fired. Investigate root cause."
+              elif source == 'aws.budgets':
+                  prompt = f"Budget alert: {json.dumps(detail, default=str)[:300]}. Investigate."
+              elif source == 'aws.ce':
+                  prompt = f"Cost anomaly detected: {json.dumps(detail, default=str)[:300]}. Investigate."
+              else:
+                  prompt = f"Cost event: {json.dumps(detail, default=str)[:300]}"
+              try:
+                  client = boto3.client('bedrock-agentcore', region_name=region)
+                  resp = client.invoke_agent_runtime(agentRuntimeArn=AGENT_ARN, payload=json.dumps({"prompt": prompt, "sessionId": f"alert-{context.aws_request_id}", "userId": "proactive"}).encode())
+                  body = json.loads(resp['response'].read().decode('utf-8'))
+                  answer = body.get('result', 'Investigation complete.')
+                  # Format email: extract structured data if available
+                  import re
+                  email_body = answer
+                  json_match = re.search(r'```json\s*([\s\S]*?)```', answer)
+                  if json_match:
+                      try:
+                          data = json.loads(json_match.group(1).strip())
+                          lines = [f"SEVERITY: {data.get('severity','unknown').upper()}", f"\n{data.get('summary','')}\n", "\nFINDINGS:"]
+                          for f in data.get('findings', []):
+                              label = f.get('label', f.get('name', ''))
+                              value = f.get('value', f.get('description', ''))
+                              status_map = {'danger': 'CRITICAL', 'warning': 'ATTENTION', 'ok': 'NORMAL'}
+                              lines.append(f"  [{status_map.get(f.get('status',''), f.get('status','').upper())}] {label}: {value}")
+                          if data.get('timeline'):
+                              lines.append("\nTIMELINE:")
+                              for t in data['timeline']:
+                                  lines.append(f"  {t.get('time','')} - {t.get('event','')}")
+                          if data.get('actions'):
+                              lines.append("\nRECOMMENDED ACTIONS:")
+                              for a in data['actions']:
+                                  lines.append(f"  - {a.get('label', a.get('action',''))}")
+                          if data.get('blind_spots'):
+                              lines.append(f"\nBLIND SPOTS: {data['blind_spots']}")
+                          email_body = '\n'.join(lines)
+                      except: pass
+                  sns.publish(TopicArn=SNS_TOPIC, Subject=f"CostOp: {alarm if source=='aws.cloudwatch' else 'Alert'}"[:100], Message=email_body[:4000])
+              except Exception as e:
+                  sns.publish(TopicArn=SNS_TOPIC, Subject="CostOp: Investigation Failed", Message=str(e))
+              return {'statusCode': 200}
+
+  BridgeLambdaAlarmPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BridgeLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AlarmTriggerRule.Arn
+
+  BridgeLambdaBudgetPermission:
+    Type: AWS::Lambda::Permission
+    Condition: CreateBudget
+    Properties:
+      FunctionName: !Ref BridgeLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt BudgetTriggerRule.Arn
+
+  BridgeLambdaAnomalyPermission:
+    Type: AWS::Lambda::Permission
+    Condition: CreateAnomalyDetection
+    Properties:
+      FunctionName: !Ref BridgeLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AnomalyTriggerRule.Arn
+
+  # ============================================
+  # Budget (conditional)
+  # ============================================
+  BedrockBudget:
+    Type: AWS::Budgets::Budget
+    Condition: CreateBudget
+    Properties:
+      Budget:
+        BudgetName: !Sub '${AWS::StackName}-Bedrock-Budget'
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetLimit
+          Unit: USD
+        TimeUnit: MONTHLY
+        BudgetType: COST
+        CostFilters:
+          Service: [Amazon Bedrock]
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: SNS
+              Address: !Ref AlertTopic
+
+  # ============================================
+  # Invocation Logging (conditional)
+  # ============================================
+  LoggingRole:
+    Type: AWS::IAM::Role
+    Condition: EnableLogging
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: bedrock.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LogDelivery
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock/modelinvocations:*'
+
+  # Log group created automatically by Bedrock when invocation logging is enabled
+
+  # ============================================
+  # Cognito (auth)
+  # ============================================
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${AWS::StackName}-users'
+      AutoVerifiedAttributes: [email]
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows: [ALLOW_USER_PASSWORD_AUTH, ALLOW_USER_SRP_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+
+  IdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      IdentityPoolName: !Sub '${AWS::StackName}_identity'
+      AllowUnauthenticatedIdentities: false
+      CognitoIdentityProviders:
+        - ClientId: !Ref UserPoolClient
+          ProviderName: !GetAtt UserPool.ProviderName
+
+  AuthenticatedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Federated: cognito-identity.amazonaws.com}
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals: {'cognito-identity.amazonaws.com:aud': !Ref IdentityPool}
+              ForAnyValue:StringLike: {'cognito-identity.amazonaws.com:amr': authenticated}
+      Policies:
+        - PolicyName: AuthUserPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [bedrock-agentcore:InvokeAgentRuntime]
+                Resource:
+                  - !GetAtt AgentRuntime.AgentRuntimeArn
+                  - !Sub '${AgentRuntime.AgentRuntimeArn}/*'
+              - Effect: Allow
+                Action: [cloudwatch:DescribeAlarms, cloudwatch:DescribeAlarmHistory, cloudwatch:GetMetricData]
+                Resource: '*'
+              - Effect: Allow
+                Action: [dynamodb:Scan, dynamodb:GetItem]
+                Resource: !GetAtt InvestigationsTable.Arn
+              - Effect: Allow
+                Action: [budgets:DescribeBudgets]
+                Resource: '*'
+              - Effect: Allow
+                Action: [ce:GetAnomalies]
+                Resource: '*'
+
+  IdentityPoolRoleAttachment:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId: !Ref IdentityPool
+      Roles:
+        authenticated: !GetAtt AuthenticatedRole.Arn
+
+  AdminUser:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPool
+      Username: admin
+      UserAttributes:
+        - Name: email
+          Value: !Ref AdminEmail
+        - Name: email_verified
+          Value: 'true'
+      DesiredDeliveryMediums: [EMAIL]
+
+  # ============================================
+  # Amplify Web UI (auto-deployed with config)
+  # ============================================
+  AmplifyApp:
+    Type: AWS::Amplify::App
+    DependsOn: AgentRuntime
+    Properties:
+      Name: !Sub '${AWS::StackName}-UI'
+
+  AmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: main
+
+  UIDeployLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: AmplifyDeploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [amplify:CreateDeployment, amplify:StartDeployment]
+                Resource: !Sub 'arn:aws:amplify:${AWS::Region}:${AWS::AccountId}:apps/${AmplifyApp.AppId}/*'
+
+  UIDeployLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 120
+      MemorySize: 256
+      Role: !GetAtt UIDeployLambdaRole.Arn
+      Code:
+        ZipFile: |
+          import json, urllib.request, zipfile, io, time, boto3, re
+
+          def send_response(event, context, status, data={}):
+              body = json.dumps({'Status': status, 'Reason': str(data), 'PhysicalResourceId': event.get('PhysicalResourceId', context.log_stream_name), 'StackId': event['StackId'], 'RequestId': event['RequestId'], 'LogicalResourceId': event['LogicalResourceId'], 'Data': data})
+              urllib.request.urlopen(urllib.request.Request(event['ResponseURL'], data=body.encode(), headers={'Content-Type': ''}, method='PUT'))
+
+          def handler(event, context):
+              if event['RequestType'] == 'Delete':
+                  send_response(event, context, 'SUCCESS')
+                  return
+              try:
+                  props = event['ResourceProperties']
+                  time.sleep(10)
+                  # Download pre-built UI from GitHub release
+                  ui_url = 'https://github.com/amitml/cost-intelligence-agent/releases/download/v2/costop-ui.zip'
+                  resp = urllib.request.urlopen(ui_url, timeout=30)
+                  ui_zip_data = resp.read()
+                  # Inject config into main.js inside the zip
+                  config_js = f"window.COSTOP_CONFIG={{userPoolId:'{props['UserPoolId']}',clientId:'{props['ClientId']}',identityPoolId:'{props['IdentityPoolId']}',agentArn:'{props['AgentArn']}',region:'{props['Region']}',investigationsTable:'{props['StackName']}-investigations',alarmPrefix:'{props['StackName']}'}};"
+                  buf = io.BytesIO(ui_zip_data)
+                  out_buf = io.BytesIO()
+                  with zipfile.ZipFile(buf, 'r') as zin, zipfile.ZipFile(out_buf, 'w') as zout:
+                      for item in zin.namelist():
+                          data = zin.read(item)
+                          if item == 'index.html':
+                              # Inject config script BEFORE the main.js script tag
+                              data = data.replace(b'<script type="module"', f'<script>{config_js}</script>\n<script type="module"'.encode())
+                          zout.writestr(item, data)
+                  # Deploy to Amplify
+                  amplify = boto3.client('amplify', region_name=props['Region'])
+                  deployment = amplify.create_deployment(appId=props['AppId'], branchName='main')
+                  req = urllib.request.Request(deployment['zipUploadUrl'], data=out_buf.getvalue(), method='PUT')
+                  urllib.request.urlopen(req)
+                  amplify.start_deployment(appId=props['AppId'], branchName='main', jobId=deployment['jobId'])
+                  time.sleep(8)
+                  send_response(event, context, 'SUCCESS', {'URL': f"https://main.{props['AppDomain']}"})
+              except Exception as e:
+                  send_response(event, context, 'FAILED', {'Error': str(e)})
+
+  UIDeployTrigger:
+    Type: Custom::UIDeployment
+    DependsOn: [AgentRuntime, AmplifyBranch, IdentityPoolRoleAttachment]
+    Properties:
+      ServiceToken: !GetAtt UIDeployLambda.Arn
+      AppId: !GetAtt AmplifyApp.AppId
+      AppDomain: !GetAtt AmplifyApp.DefaultDomain
+      UserPoolId: !Ref UserPool
+      ClientId: !Ref UserPoolClient
+      IdentityPoolId: !Ref IdentityPool
+      AgentArn: !GetAtt AgentRuntime.AgentRuntimeArn
+      Region: !Ref AWS::Region
+      StackName: !Ref AWS::StackName
+
+
+  # ============================================
+  # Seed patterns and topology tables
+  # ============================================
+  SeedDataLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DDBWrite
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:PutItem, dynamodb:BatchWriteItem]
+                Resource:
+                  - !GetAtt PatternsTable.Arn
+                  - !GetAtt TopologyTable.Arn
+
+  SeedDataLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 60
+      Role: !GetAtt SeedDataLambdaRole.Arn
+      Code:
+        ZipFile: |
+          import json, urllib.request, boto3, os
+          def send_response(event, context, status, data={}):
+              body = json.dumps({'Status': status, 'Reason': str(data), 'PhysicalResourceId': event.get('PhysicalResourceId', context.log_stream_name), 'StackId': event['StackId'], 'RequestId': event['RequestId'], 'LogicalResourceId': event['LogicalResourceId'], 'Data': data})
+              urllib.request.urlopen(urllib.request.Request(event['ResponseURL'], data=body.encode(), headers={'Content-Type': ''}, method='PUT'))
+          def handler(event, context):
+              if event['RequestType'] == 'Delete':
+                  send_response(event, context, 'SUCCESS')
+                  return
+              try:
+                  props = event['ResourceProperties']
+                  ddb = boto3.resource('dynamodb', region_name=props['Region'])
+                  # Seed patterns
+                  pt = ddb.Table(props['PatternsTable'])
+                  patterns = [
+                      {'pattern_id':'p-001','pattern_type':'bedrock-token-spike','root_cause':'Concurrent agent sessions with large context windows.','resolution':'1. Check invocation logs. 2. If loop: throttle. 3. If organic: monitor.','cost_impact':'$2-5/hour','occurrences':3},
+                      {'pattern_id':'p-002','pattern_type':'tpm-quota-breach','root_cause':'High TPM from concurrent sessions. Verify actual quota with get_service_quotas.','resolution':'1. Check quota limit. 2. Raise alarm threshold or request increase.','cost_impact':'Throttling risk','occurrences':5},
+                      {'pattern_id':'p-003','pattern_type':'self-investigation-loop','root_cause':'Agent investigating own token usage creates recursive feedback.','resolution':'1. Filter self-caused alarms. 2. Add dedup cooldown.','cost_impact':'$5-10/hour','occurrences':3}
+                  ]
+                  for p in patterns:
+                      pt.put_item(Item={k: str(v) if isinstance(v, int) else v for k, v in p.items()})
+                  send_response(event, context, 'SUCCESS')
+              except Exception as e:
+                  send_response(event, context, 'FAILED', {'Error': str(e)})
+
+  SeedDataTrigger:
+    Type: Custom::SeedData
+    DependsOn: [PatternsTable, TopologyTable]
+    Properties:
+      ServiceToken: !GetAtt SeedDataLambda.Arn
+      PatternsTable: !Ref PatternsTable
+      TopologyTable: !Ref TopologyTable
+      Region: !Ref AWS::Region
+
+Outputs:
+  AgentRuntimeArn:
+    Value: !GetAtt AgentRuntime.AgentRuntimeArn
+    Description: AgentCore Runtime ARN
+
+  UserPoolId:
+    Value: !Ref UserPool
+
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+
+  IdentityPoolId:
+    Value: !Ref IdentityPool
+
+  SNSTopicArn:
+    Value: !Ref AlertTopic
+
+  WebAppURL:
+    Value: !Sub 'https://main.${AmplifyApp.DefaultDomain}'
+    Description: CostOp Web UI URL

@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CostOp Intelligence Agent — Architecture Document</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --squid-ink: #232F3E;
+  --smile-orange: #FF9900;
+  --cosmos-blue: #0972D3;
+  --bg: #F8F9FA;
+  --card-bg: #FFFFFF;
+  --text: #16191F;
+  --text-secondary: #5F6B7A;
+  --border: #E9EBED;
+  --compute: #ED7100;
+  --storage: #3F8624;
+  --networking: #8C4FFF;
+  --database: #C925D1;
+  --security: #DD344C;
+  --analytics: #E7157B;
+  --ai-ml: #01A88D;
+  --management: #E7157B;
+  --dev-tools: #7B68EE;
+  --integration: #ED7100;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Amazon Ember', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+.top-bar {
+  background: var(--squid-ink);
+  padding: 14px 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.top-bar .logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.top-bar .logo svg { width: 28px; height: 28px; }
+.top-bar .logo-text {
+  color: #FFFFFF;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.top-bar .logo-sub {
+  color: var(--smile-orange);
+  font-size: 13px;
+  font-weight: 400;
+  margin-left: 8px;
+}
+.top-bar nav { margin-left: auto; display: flex; gap: 24px; }
+.top-bar nav a { color: #D5DBDB; text-decoration: none; font-size: 13px; }
+.top-bar nav a:hover { color: var(--smile-orange); }
+.container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px 32px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.card h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--squid-ink);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--smile-orange);
+}
+.card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--squid-ink);
+  margin: 20px 0 10px;
+}
+.card p { color: var(--text-secondary); margin-bottom: 12px; font-size: 14px; }
+.callout {
+  border-left: 4px solid var(--smile-orange);
+  background: #FFF8F0;
+  padding: 14px 18px;
+  margin: 16px 0;
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+}
+.callout strong { color: var(--squid-ink); }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 12px 0;
+}
+table th {
+  background: var(--squid-ink);
+  color: #FFFFFF;
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+}
+table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+table tr:hover td { background: #F4F6F8; }
+table a { color: var(--cosmos-blue); text-decoration: none; }
+table a:hover { text-decoration: underline; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.badge .icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.badge .icon svg { width: 12px; height: 12px; fill: #FFFFFF; }
+.pillar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.pillar-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 20px;
+  background: var(--card-bg);
+}
+.pillar-card .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+.pillar-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.pillar-card p { font-size: 12px; color: var(--text-secondary); margin: 0; }
+.mermaid { margin: 20px 0; }
+.diagram-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+.project-structure {
+  background: #F4F6F8;
+  border-radius: 6px;
+  padding: 16px 20px;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text);
+  overflow-x: auto;
+}
+@media print {
+  .top-bar { position: static; }
+  .card { break-inside: avoid; box-shadow: none; border: 1px solid #DDD; }
+  body { background: #FFF; }
+  .mermaid svg { max-width: 100% !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="logo">
+    <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+      <rect width="40" height="40" rx="6" fill="#FF9900"/>
+      <path d="M10 25c5 3 15 3 20 0" stroke="#232F3E" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <path d="M28 24l2 2-2 2" stroke="#232F3E" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="logo-text">CostOp Intelligence Agent<span class="logo-sub">Architecture Document</span></span>
+  </div>
+  <nav>
+    <a href="#overview">Overview</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#services">Services</a>
+    <a href="#dataflow">Data Flow</a>
+    <a href="#security">Security</a>
+    <a href="#deployment">Deployment</a>
+    <a href="#cost">Cost</a>
+    <a href="#well-architected">Well-Architected</a>
+  </nav>
+</div>
+
+<div class="container">
+
+<!-- Architecture Overview -->
+<div class="card" id="overview">
+  <h2>Architecture Overview</h2>
+  <p>CostOp Intelligence Agent is a real-time FinOps monitoring and investigation agent built on <strong>Amazon Bedrock AgentCore</strong>. It autonomously detects cost anomalies, investigates root causes using hypothesis-driven reasoning, and delivers structured reports via email and Slack.</p>
+  <p>The system extends the AWS FinOps Agent pattern with proactive alerting, pattern memory, per-agent cost tracking, and a web-based investigation console.</p>
+
+  <div class="callout">
+    <strong>Well-Architected Decision:</strong> The agent uses Amazon Bedrock AgentCore (managed container runtime) instead of self-managed ECS/EKS to minimize operational overhead while maintaining full tool-use capabilities via the Strands SDK.
+  </div>
+
+  <h3>Project Structure</h3>
+  <div class="project-structure">
+cloud-intelligence-agent/
+├── agentcore/                    # Agent runtime (containerized)
+│   ├── agent_runtime.py          # Main entrypoint — BedrockAgentCoreApp
+│   ├── tools.py                  # 12 combined tools (from 36 original)
+│   ├── skill_loader.py           # Query-based skill routing
+│   ├── slack_handler.py          # Slack Socket Mode integration
+│   ├── streamable_http_sigv4.py  # MCP Gateway SigV4 auth
+│   ├── skills/                   # Skill definitions (SKILL.md)
+│   │   ├── cost-overview/
+│   │   ├── cost-spike-investigation/
+│   │   └── agent-economics-review/
+│   ├── Dockerfile                # Multi-stage Python 3.12 build
+│   └── requirements.txt
+├── cloudformation/
+│   └── costop-template.yaml      # Full IaC (single-stack deployment)
+├── web/                          # Frontend (Amplify-hosted SPA)
+│   ├── index.html
+│   ├── main.js                   # Auth + Agent invocation + UI
+│   ├── package.json
+│   └── vite.config.js
+└── scripts/
+    ├── deploy.sh                 # CDK-based deployment
+    └── deploy-ui.sh              # UI deployment helper
+  </div>
+</div>
+
+
+<!-- System Architecture Diagram -->
+<div class="card" id="architecture">
+  <h2>System Architecture Diagram</h2>
+  <div class="diagram-title">High-Level Architecture</div>
+  <div class="mermaid">
+graph TB
+    subgraph "Client Layer"
+        UI["🌐 Web UI<br/>(AWS Amplify)"]
+        SLACK["💬 Slack<br/>(Socket Mode)"]
+    end
+
+    subgraph "Authentication"
+        COGNITO["🔐 Amazon Cognito<br/>(User Pool + Identity Pool)"]
+    end
+
+    subgraph "Agent Runtime"
+        AGENTCORE["🤖 Amazon Bedrock AgentCore<br/>(Container Runtime)"]
+        SKILLS["📋 Skill Router<br/>(cost-overview, spike-investigation, economics)"]
+        TOOLS["🔧 12 Combined Tools"]
+        MEMORY["💾 AgentCore Memory<br/>(Conversation History)"]
+    end
+
+    subgraph "Event-Driven Triggers"
+        EB["📡 Amazon EventBridge"]
+        BRIDGE["⚡ Bridge Lambda<br/>(Proactive Investigations)"]
+    end
+
+    subgraph "Monitoring & Alerting"
+        CW["📊 Amazon CloudWatch<br/>(5 Bedrock Alarms)"]
+        CT["🔍 AWS CloudTrail"]
+        CE["💰 AWS Cost Explorer"]
+        LOGS["📝 CloudWatch Logs<br/>(Invocation Logging)"]
+    end
+
+    subgraph "Data Layer"
+        DDB_P["🗄️ DynamoDB<br/>(Patterns)"]
+        DDB_I["🗄️ DynamoDB<br/>(Investigations)"]
+        DDB_T["🗄️ DynamoDB<br/>(Topology)"]
+    end
+
+    subgraph "Notifications"
+        SNS["📧 Amazon SNS<br/>(Email Alerts)"]
+        BUDGET["💵 AWS Budgets"]
+    end
+
+    subgraph "AI/ML"
+        BEDROCK["🧠 Amazon Bedrock<br/>(Claude Sonnet 4.6)"]
+        MCP["🔌 MCP Gateway<br/>(Billing + Pricing Tools)"]
+    end
+
+    UI -->|SigV4 Auth| COGNITO
+    COGNITO -->|Credentials| AGENTCORE
+    SLACK -->|Socket Mode| AGENTCORE
+    AGENTCORE --> SKILLS
+    AGENTCORE --> TOOLS
+    AGENTCORE --> MEMORY
+    AGENTCORE -->|InvokeModel| BEDROCK
+    AGENTCORE -->|SigV4 MCP| MCP
+    TOOLS --> CW
+    TOOLS --> CT
+    TOOLS --> CE
+    TOOLS --> LOGS
+    TOOLS --> DDB_P
+    TOOLS --> DDB_I
+    TOOLS --> DDB_T
+    TOOLS --> SNS
+    CW -->|Alarm State Change| EB
+    BUDGET -->|Budget Alert| EB
+    CE -->|Anomaly Detected| EB
+    EB --> BRIDGE
+    BRIDGE -->|InvokeAgentRuntime| AGENTCORE
+    BRIDGE --> SNS
+  </div>
+</div>
+
+
+<!-- AWS Services Table -->
+<div class="card" id="services">
+  <h2>AWS Services Used</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Service</th>
+        <th>Purpose</th>
+        <th>Configuration</th>
+        <th>Documentation</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--ai-ml)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></span>Amazon Bedrock AgentCore</span></td>
+        <td>Managed container runtime for the AI agent. Handles scaling, auth, and Gateway integration.</td>
+        <td>Container image from ECR Private; PUBLIC network mode; IAM role with 14 policy statements</td>
+        <td><a href="https://docs.aws.amazon.com/bedrock/latest/userguide/agentcore.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--ai-ml)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></span>Amazon Bedrock</span></td>
+        <td>Foundation model inference (Claude Sonnet 4.6 / 4.5 / Haiku 4.5). Powers reasoning and tool use.</td>
+        <td>Configurable model ID; max 12,000 tokens; Converse API with streaming</td>
+        <td><a href="https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-bedrock.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--ai-ml)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></span>Amazon Bedrock AgentCore Memory</span></td>
+        <td>Persistent conversation memory across sessions. Stores interaction history per user/session.</td>
+        <td>Configurable retention (7–365 days); per-session and per-user isolation</td>
+        <td><a href="https://docs.aws.amazon.com/bedrock/latest/userguide/agentcore-memory.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--security)"><svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.5 3.4 10.7 8 12 4.6-1.3 8-6.5 8-12V6l-8-4z"/></svg></span>Amazon Cognito</span></td>
+        <td>User authentication (User Pool) and AWS credential vending (Identity Pool) for the web UI.</td>
+        <td>Admin-only user creation; SRP + password auth; strong password policy; email verification</td>
+        <td><a href="https://docs.aws.amazon.com/cognito/latest/developerguide/what-is-amazon-cognito.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--management)"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/></svg></span>Amazon CloudWatch</span></td>
+        <td>Real-time Bedrock metrics monitoring. 5 alarms: Token Spike, RPM, TPM Quota, Throttles, Errors.</td>
+        <td>1–5 min periods; Sum/Maximum stats; configurable thresholds via parameters</td>
+        <td><a href="https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/WhatIsCloudWatch.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--management)"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/></svg></span>Amazon CloudWatch Logs</span></td>
+        <td>Bedrock model invocation logging. Enables per-caller token analysis and loop detection.</td>
+        <td>Log group: /aws/bedrock/modelinvocations; Insights queries for aggregation</td>
+        <td><a href="https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/WhatIsCloudWatchLogs.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--management)"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/></svg></span>AWS CloudTrail</span></td>
+        <td>API activity audit trail. Used to identify WHO made changes and WHEN during investigations.</td>
+        <td>LookupEvents API; filters by EventSource; 6-hour default lookback</td>
+        <td><a href="https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-user-guide.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--analytics)"><svg viewBox="0 0 24 24"><path d="M3 3v18h18V3H3zm4 14H5v-6h2v6zm4 0H9V7h2v10zm4 0h-2v-4h2v4zm4 0h-2v-8h2v8z"/></svg></span>AWS Cost Explorer</span></td>
+        <td>Cost and usage data. Provides daily spend by service, anomaly detection, and forecasting.</td>
+        <td>BlendedCost metric; SERVICE grouping; 7-day default lookback; anomaly detection</td>
+        <td><a href="https://docs.aws.amazon.com/cost-management/latest/userguide/ce-what-is.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--database)"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="4"/><path d="M4 6v12c0 2.2 3.6 4 8 4s8-1.8 8-4V6"/></svg></span>Amazon DynamoDB</span></td>
+        <td>Three tables: Patterns (learned incidents), Investigations (results), Topology (resource graph).</td>
+        <td>PAY_PER_REQUEST billing; simple key schema (pattern_id, investigation_id, resource_id)</td>
+        <td><a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--integration)"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>Amazon EventBridge</span></td>
+        <td>Event routing for proactive investigations. Captures alarm state changes, budget alerts, and cost anomalies.</td>
+        <td>3 rules: alarm-trigger, budget-trigger, anomaly-trigger → Bridge Lambda</td>
+        <td><a href="https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-what-is.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--compute)"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-1 15l-5-5 1.4-1.4L11 14.2l7.6-7.6L20 8l-9 9z"/></svg></span>AWS Lambda</span></td>
+        <td>Two functions: Bridge Lambda (event→agent invocation) and Build Trigger (ECR image copy).</td>
+        <td>Python 3.12; 120s/600s timeout; 256MB memory; 5-min dedup cooldown</td>
+        <td><a href="https://docs.aws.amazon.com/lambda/latest/dg/welcome.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--integration)"><svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg></span>Amazon SNS</span></td>
+        <td>Alert delivery. Sends investigation results and alarm notifications via email.</td>
+        <td>Email protocol subscription; auto-created or user-provided topic ARN</td>
+        <td><a href="https://docs.aws.amazon.com/sns/latest/dg/welcome.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--analytics)"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg></span>AWS Budgets</span></td>
+        <td>Monthly cost guardrail for Bedrock spend. Alerts at 80% threshold via SNS.</td>
+        <td>COST type; MONTHLY; filtered to Amazon Bedrock service; configurable limit</td>
+        <td><a href="https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--analytics)"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/></svg></span>AWS Cost Anomaly Detection</span></td>
+        <td>ML-based anomaly detection for unexpected cost spikes. Triggers EventBridge events.</td>
+        <td>Conditional creation; integrates with EventBridge for automated investigation</td>
+        <td><a href="https://docs.aws.amazon.com/cost-management/latest/userguide/manage-ad.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--compute)"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/></svg></span>Amazon ECR</span></td>
+        <td>Private container registry for the agent Docker image. Lifecycle policy keeps 3 images max.</td>
+        <td>MUTABLE tags; lifecycle: keep 3 images; image copied from public ECR via CodeBuild</td>
+        <td><a href="https://docs.aws.amazon.com/AmazonECR/latest/userguide/what-is-ecr.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--dev-tools)"><svg viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg></span>AWS CodeBuild</span></td>
+        <td>Copies the public agent image to the private ECR repo during stack creation.</td>
+        <td>ARM container; BUILD_GENERAL1_SMALL; 10-min timeout; NO_SOURCE type</td>
+        <td><a href="https://docs.aws.amazon.com/codebuild/latest/userguide/welcome.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--networking)"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/></svg></span>AWS Amplify Hosting</span></td>
+        <td>Static web hosting for the investigation console SPA. Auto-deployed during stack creation.</td>
+        <td>Single-page app; main branch; config injected at deploy time via Custom Resource</td>
+        <td><a href="https://docs.aws.amazon.com/amplify/latest/userguide/welcome.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--security)"><svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 5.5 3.4 10.7 8 12 4.6-1.3 8-6.5 8-12V6l-8-4z"/></svg></span>AWS IAM</span></td>
+        <td>Least-privilege roles for runtime, Lambda, CodeBuild, Cognito authenticated users, and memory.</td>
+        <td>6 IAM roles; scoped policies per resource; STS AssumeRole for cross-service access</td>
+        <td><a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction.html" target="_blank">Docs</a></td>
+      </tr>
+      <tr>
+        <td><span class="badge"><span class="icon" style="background:var(--management)"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg></span>AWS Service Quotas</span></td>
+        <td>Runtime quota checks for Bedrock TPM/RPM limits. Enables proactive quota increase requests.</td>
+        <td>ListServiceQuotas + GetServiceQuota + RequestServiceQuotaIncrease</td>
+        <td><a href="https://docs.aws.amazon.com/servicequotas/latest/userguide/intro.html" target="_blank">Docs</a></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- Data Flow -->
+<div class="card" id="dataflow">
+  <h2>Data Flow</h2>
+
+  <div class="diagram-title">User-Initiated Investigation Flow</div>
+  <div class="mermaid">
+sequenceDiagram
+    participant User as �� User
+    participant UI as 🌐 Web UI (Amplify)
+    participant Cognito as 🔐 Amazon Cognito
+    participant AC as 🤖 AgentCore Runtime
+    participant Bedrock as 🧠 Amazon Bedrock
+    participant CW as 📊 CloudWatch
+    participant CT as 🔍 CloudTrail
+    participant CE as 💰 Cost Explorer
+    participant DDB as 🗄️ DynamoDB
+
+    User->>UI: "Investigate token spike alarm"
+    UI->>Cognito: fetchAuthSession()
+    Cognito-->>UI: Temporary AWS credentials
+    UI->>AC: POST /runtimes/{arn}/invocations (SigV4)
+    AC->>AC: select_skill("cost-spike-investigation")
+    AC->>Bedrock: Converse (system prompt + skill + user query)
+    Bedrock-->>AC: Tool use: get_monitoring_data('alarms')
+    AC->>CW: DescribeAlarms
+    CW-->>AC: Alarm states + thresholds
+    AC->>Bedrock: Tool result → next reasoning step
+    Bedrock-->>AC: Tool use: get_monitoring_data('bedrock_usage')
+    AC->>CW: GetMetricData (InputTokenCount, OutputTokenCount)
+    CW-->>AC: Token counts (last 60 min)
+    AC->>Bedrock: Tool result → hypothesis formed
+    Bedrock-->>AC: Tool use: check_invocation_logs()
+    AC->>CW: StartQuery (Logs Insights)
+    CW-->>AC: Per-caller breakdown + outliers
+    AC->>Bedrock: Tool result → root cause identified
+    Bedrock-->>AC: Tool use: get_cost_data('usage')
+    AC->>CE: GetCostAndUsage
+    CE-->>AC: Dollar context
+    AC->>Bedrock: All evidence → final response
+    Bedrock-->>AC: Structured JSON investigation result
+    AC->>DDB: PutItem (auto-save investigation)
+    AC-->>UI: JSON response with findings, timeline, actions
+    UI-->>User: Rendered investigation cards
+  </div>
+
+  <div class="diagram-title">Proactive (Event-Driven) Investigation Flow</div>
+  <div class="mermaid">
+sequenceDiagram
+    participant CW as 📊 CloudWatch Alarm
+    participant EB as 📡 EventBridge
+    participant Lambda as ⚡ Bridge Lambda
+    participant DDB as 🗄️ DynamoDB
+    participant AC as �� AgentCore Runtime
+    participant SNS as 📧 Amazon SNS
+    participant User as 👤 User (Email)
+
+    CW->>EB: Alarm State Change → ALARM
+    EB->>Lambda: Invoke (event payload)
+    Lambda->>DDB: Check dedup (5-min cooldown)
+    DDB-->>Lambda: Not recent → proceed
+    Lambda->>DDB: Mark dedup timestamp
+    Lambda->>AC: InvokeAgentRuntime (prompt: "Investigate alarm X")
+    AC->>AC: Full investigation cycle (tools + reasoning)
+    AC-->>Lambda: Structured JSON result
+    Lambda->>Lambda: Format email (extract findings, timeline)
+    Lambda->>SNS: Publish (formatted investigation)
+    SNS->>User: Email with severity, findings, actions
+  </div>
+
+  <div class="callout">
+    <strong>Well-Architected Decision:</strong> The Bridge Lambda implements a 5-minute dedup cooldown per alarm to prevent investigation storms. A global <code>_any_</code> key ensures only one investigation runs at a time regardless of which alarm fires.
+  </div>
+</div>
+
+
+<!-- Data Flow -->
+<div class="card" id="dataflow">
+  <h2>Data Flow</h2>
+  <div class="diagram-title">End-to-End Request Flow — User Investigation</div>
+  <div class="mermaid">
+sequenceDiagram
+    participant U as Web UI
+    participant C as Amazon Cognito
+    participant A as AgentCore Runtime
+    participant B as Amazon Bedrock
+    participant CW as CloudWatch
+    participant CT as CloudTrail
+    participant CE as Cost Explorer
+    participant D as DynamoDB
+    participant S as Amazon SNS
+
+    U->>C: Sign in (SRP Auth)
+    C-->>U: JWT + AWS Credentials
+    U->>A: InvokeAgentRuntime (SigV4)
+    A->>A: select_skill(query)
+    A->>B: Converse (system prompt + tools)
+    B-->>A: Tool use request
+    A->>CW: GetMetricData (Bedrock usage)
+    CW-->>A: Token counts, invocations
+    A->>CT: LookupEvents (recent changes)
+    CT-->>A: API activity log
+    A->>CE: GetCostAndUsage
+    CE-->>A: Daily spend by service
+    A->>B: Tool results → Continue reasoning
+    B-->>A: Final response (structured JSON)
+    A->>D: PutItem (auto-save investigation)
+    A-->>U: Investigation result
+  </div>
+
+  <div class="diagram-title">Proactive Investigation Flow — Event-Driven</div>
+  <div class="mermaid">
+sequenceDiagram
+    participant CW as CloudWatch Alarm
+    participant EB as EventBridge
+    participant L as Bridge Lambda
+    participant D as DynamoDB
+    participant A as AgentCore Runtime
+    participant B as Amazon Bedrock
+    participant S as Amazon SNS
+
+    CW->>EB: Alarm State → ALARM
+    EB->>L: Route event
+    L->>D: Check dedup (5-min cooldown)
+    D-->>L: Not recent
+    L->>A: InvokeAgentRuntime (prompt)
+    A->>B: Investigate root cause
+    B-->>A: Structured findings
+    A-->>L: Investigation result
+    L->>S: Publish (formatted email)
+    S-->>S: Deliver to admin email
+  </div>
+</div>
+
+<!-- Security & IAM -->
+<div class="card" id="security">
+  <h2>Security &amp; IAM</h2>
+  <p>The system implements defense-in-depth with multiple security layers:</p>
+
+  <h3>Authentication Flow</h3>
+  <table>
+    <thead><tr><th>Layer</th><th>Mechanism</th><th>Details</th></tr></thead>
+    <tbody>
+      <tr><td>User → Web UI</td><td>Amazon Cognito User Pool</td><td>SRP auth; strong password policy (8+ chars, mixed case, numbers, symbols); admin-only user creation</td></tr>
+      <tr><td>Web UI → AgentCore</td><td>AWS SigV4 (via Identity Pool)</td><td>Cognito Identity Pool vends temporary AWS credentials; authenticated role with scoped permissions</td></tr>
+      <tr><td>AgentCore → Bedrock</td><td>IAM Role (sts:AssumeRole)</td><td>Service principal: bedrock-agentcore.amazonaws.com; least-privilege policy per service</td></tr>
+      <tr><td>AgentCore → MCP Gateway</td><td>SigV4 over Streamable HTTP</td><td>Custom HTTPX auth class signs every MCP request with runtime role credentials</td></tr>
+      <tr><td>EventBridge → Lambda</td><td>Resource-based policy</td><td>Lambda permission grants invoke only from specific EventBridge rule ARN</td></tr>
+    </tbody>
+  </table>
+
+  <h3>IAM Roles (6 total)</h3>
+  <table>
+    <thead><tr><th>Role</th><th>Principal</th><th>Key Permissions</th></tr></thead>
+    <tbody>
+      <tr><td>RuntimeRole</td><td>bedrock-agentcore.amazonaws.com</td><td>Bedrock invoke, Cost Explorer, CloudTrail, CloudWatch, DynamoDB CRUD, SNS publish, Service Quotas, Lambda concurrency</td></tr>
+      <tr><td>BridgeLambdaRole</td><td>lambda.amazonaws.com</td><td>InvokeAgentRuntime, SNS publish, DynamoDB read/write, Secrets Manager read</td></tr>
+      <tr><td>AuthenticatedRole</td><td>cognito-identity.amazonaws.com</td><td>InvokeAgentRuntime, CloudWatch read, DynamoDB scan, Budgets read, Cost Explorer anomalies</td></tr>
+      <tr><td>MemoryRole</td><td>bedrock-agentcore.amazonaws.com</td><td>AgentCore memory operations (CreateEvent, GetLastKTurns, ListEvents)</td></tr>
+      <tr><td>ImageBuildRole</td><td>codebuild.amazonaws.com</td><td>ECR push/pull, ECR Public read, CloudWatch Logs</td></tr>
+      <tr><td>LoggingRole</td><td>bedrock.amazonaws.com</td><td>CloudWatch Logs (CreateLogGroup, CreateLogStream, PutLogEvents)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>Well-Architected Decision:</strong> Destructive agent tools (stop_agent_invocations, set_budget_alert) require explicit user confirmation before execution. The agent's system prompt enforces this constraint.
+  </div>
+</div>
+
+
+<!-- Deployment Architecture -->
+<div class="card" id="deployment">
+  <h2>Deployment Architecture</h2>
+  <p>Single CloudFormation stack (~1080 lines) deploys the entire system in approximately 5 minutes. No CDK, SAM, or Terraform required.</p>
+
+  <div class="diagram-title">Deployment Stages</div>
+  <div class="mermaid">
+graph LR
+    A["1. Stack Create<br/>(Parameters)"] --> B["2. SNS + DynamoDB<br/>(Core Infra)"]
+    B --> C["3. IAM Roles<br/>(6 Roles)"]
+    C --> D["4. CodeBuild<br/>(Image Copy)"]
+    D --> E["5. AgentCore Runtime<br/>(Container Deploy)"]
+    E --> F["6. CloudWatch Alarms<br/>(5 Conditional)"]
+    F --> G["7. EventBridge Rules<br/>(3 Triggers)"]
+    G --> H["8. Cognito + Amplify<br/>(Auth + UI)"]
+    H --> I["9. Seed Data<br/>(Pattern Library)"]
+
+    style A fill:#232F3E,color:#FFF
+    style E fill:#01A88D,color:#FFF
+    style H fill:#DD344C,color:#FFF
+    style I fill:#3F8624,color:#FFF
+  </div>
+
+  <h3>Stack Parameters</h3>
+  <table>
+    <thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>AdminEmail</td><td>(required)</td><td>Login credentials and alert notifications</td></tr>
+      <tr><td>DefaultModel</td><td>Sonnet4.6</td><td>Sonnet4.6 | Sonnet4.5 | Haiku4.5</td></tr>
+      <tr><td>CustomModelId</td><td>(empty)</td><td>Override with any Bedrock model ID</td></tr>
+      <tr><td>EnableTokenAlarm</td><td>Yes</td><td>Token spike detection (200K/5min)</td></tr>
+      <tr><td>EnableRPMAlarm</td><td>Yes</td><td>Requests per minute (100 RPM)</td></tr>
+      <tr><td>EnableTPMAlarm</td><td>Yes</td><td>TPM quota usage percentage (80%)</td></tr>
+      <tr><td>EnableThrottleAlarm</td><td>Yes</td><td>Throttled requests (5/min)</td></tr>
+      <tr><td>EnableErrorAlarm</td><td>Yes</td><td>Client errors (10/5min)</td></tr>
+      <tr><td>MonthlyBudgetLimit</td><td>100</td><td>USD monthly budget (0 = disabled)</td></tr>
+      <tr><td>EnableCostAnomalyDetection</td><td>Yes</td><td>ML-based anomaly detection</td></tr>
+      <tr><td>MemoryRetentionDays</td><td>30</td><td>Conversation history retention (7–365)</td></tr>
+      <tr><td>EnableInvocationLogging</td><td>Yes</td><td>Bedrock call-level logging</td></tr>
+      <tr><td>EnableSlack</td><td>No</td><td>Slack Socket Mode integration</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Conditional Resources</h3>
+  <p>The template uses 13 CloudFormation conditions to create resources only when needed:</p>
+  <table>
+    <thead><tr><th>Condition</th><th>Controls</th></tr></thead>
+    <tbody>
+      <tr><td>CreateTokenAlarm / CreateRPMAlarm / etc.</td><td>Individual alarm creation (AND: enabled + no existing alarms)</td></tr>
+      <tr><td>CreateBudget</td><td>AWS Budget (only if MonthlyBudgetLimit > 0)</td></tr>
+      <tr><td>CreateAnomalyDetection</td><td>Cost Anomaly Detection + EventBridge rule</td></tr>
+      <tr><td>EnableLogging</td><td>Bedrock invocation logging role</td></tr>
+      <tr><td>CreateSNSTopic</td><td>SNS topic (skip if user provides existing ARN)</td></tr>
+      <tr><td>SlackEnabled</td><td>Slack token environment variables</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Cost Considerations -->
+<div class="card" id="cost">
+  <h2>Cost Considerations</h2>
+
+  <h3>Per-Investigation Cost</h3>
+  <table>
+    <thead><tr><th>Model</th><th>Estimated Cost</th><th>Typical Token Usage</th></tr></thead>
+    <tbody>
+      <tr><td>Claude Sonnet 4.6 (default)</td><td>~$0.25</td><td>~40K input + ~4K output tokens</td></tr>
+      <tr><td>Claude Sonnet 4.5</td><td>~$0.25</td><td>~40K input + ~4K output tokens</td></tr>
+      <tr><td>Claude Haiku 4.5</td><td>~$0.03</td><td>~40K input + ~4K output tokens</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Infrastructure Costs (Monthly)</h3>
+  <table>
+    <thead><tr><th>Service</th><th>Estimated Cost</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Amazon Bedrock AgentCore</td><td>Pay-per-invocation</td><td>No idle cost; charges only during agent execution</td></tr>
+      <tr><td>Amazon DynamoDB</td><td>~$0</td><td>PAY_PER_REQUEST; free tier covers typical usage</td></tr>
+      <tr><td>AWS Lambda</td><td>~$0</td><td>Free tier: 1M requests/month; typical: &lt;100 invocations/month</td></tr>
+      <tr><td>Amazon CloudWatch</td><td>~$2.50</td><td>5 alarms × $0.10 + metrics/logs</td></tr>
+      <tr><td>Amazon SNS</td><td>~$0</td><td>Free tier: 1K email notifications/month</td></tr>
+      <tr><td>AWS Amplify Hosting</td><td>~$0</td><td>Free tier: 5GB/month; 15GB bandwidth</td></tr>
+      <tr><td>Amazon ECR</td><td>~$0.10</td><td>~500MB image × $0.10/GB</td></tr>
+      <tr><td>Amazon Cognito</td><td>~$0</td><td>Free tier: 50K MAU</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>Cost Optimization:</strong> The Bridge Lambda implements a 5-minute deduplication cooldown to prevent cascading investigations when multiple alarms fire simultaneously. This reduces unnecessary Bedrock invocations by ~70% during alarm storms.
+  </div>
+</div>
+
+
+<!-- Well-Architected Framework -->
+<div class="card" id="well-architected">
+  <h2>AWS Well-Architected Framework</h2>
+  <p>Assessment against the six pillars of the AWS Well-Architected Framework:</p>
+
+  <div class="pillar-grid">
+    <div class="pillar-card">
+      <h4><span class="dot" style="background:#DD344C"></span>Operational Excellence</h4>
+      <p><strong>Strengths:</strong> Single-stack IaC deployment; auto-investigation on alarms; structured investigation output; pattern memory for continuous improvement; conversation history via AgentCore Memory.</p>
+      <p><strong>Opportunities:</strong> Add CloudWatch dashboard for agent health; implement canary testing for agent responsiveness.</p>
+    </div>
+    <div class="pillar-card">
+      <h4><span class="dot" style="background:#DD344C"></span>Security</h4>
+      <p><strong>Strengths:</strong> Cognito-based auth with strong password policy; SigV4 signing on all API calls; least-privilege IAM roles (6 separate roles); admin-only user creation; non-root container user; destructive actions require confirmation.</p>
+      <p><strong>Opportunities:</strong> Add MFA; implement API request throttling; enable AWS WAF on Amplify endpoint.</p>
+    </div>
+    <div class="pillar-card">
+      <h4><span class="dot" style="background:#0972D3"></span>Reliability</h4>
+      <p><strong>Strengths:</strong> Managed services (AgentCore, DynamoDB, Lambda) with built-in HA; event-driven architecture with dedup prevents storm amplification; conditional resource creation avoids conflicts with existing infrastructure.</p>
+      <p><strong>Opportunities:</strong> Add DLQ to Bridge Lambda; implement circuit breaker on agent invocations; add retry logic with exponential backoff.</p>
+    </div>
+    <div class="pillar-card">
+      <h4><span class="dot" style="background:#3F8624"></span>Performance Efficiency</h4>
+      <p><strong>Strengths:</strong> Skill-based routing reduces token usage by selecting targeted prompts; 12 combined tools (from 36) reduce round-trips; ARM-based CodeBuild for efficient image builds; configurable model selection (Haiku for speed, Sonnet for quality).</p>
+      <p><strong>Opportunities:</strong> Implement response caching for repeated queries; add streaming responses for web UI.</p>
+    </div>
+    <div class="pillar-card">
+      <h4><span class="dot" style="background:#ED7100"></span>Cost Optimization</h4>
+      <p><strong>Strengths:</strong> PAY_PER_REQUEST DynamoDB; Lambda free tier; 5-min dedup cooldown prevents cascading costs; budget alerts with configurable threshold; model flexibility (Haiku = 8x cheaper); ECR lifecycle keeps only 3 images.</p>
+      <p><strong>Opportunities:</strong> Add per-session token budgets; implement graduated response (Haiku first, escalate to Sonnet for complex cases).</p>
+    </div>
+    <div class="pillar-card">
+      <h4><span class="dot" style="background:#8C4FFF"></span>Sustainability</h4>
+      <p><strong>Strengths:</strong> Serverless/managed services minimize idle compute; ARM-based builds; on-demand scaling with no over-provisioning; skill routing minimizes unnecessary LLM processing.</p>
+      <p><strong>Opportunities:</strong> Track and report carbon footprint per investigation; implement response caching to reduce redundant model calls.</p>
+    </div>
+  </div>
+</div>
+
+</div><!-- end container -->
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#232F3E',
+      primaryTextColor: '#FFFFFF',
+      primaryBorderColor: '#FF9900',
+      lineColor: '#5F6B7A',
+      secondaryColor: '#F4F6F8',
+      tertiaryColor: '#FFF8F0',
+      fontFamily: 'Amazon Ember, -apple-system, BlinkMacSystemFont, sans-serif',
+      fontSize: '13px'
+    },
+    flowchart: { curve: 'basis', padding: 20 },
+    sequence: { mirrorActors: false, messageAlign: 'center' }
+  });
+</script>
+</body>
+</html>

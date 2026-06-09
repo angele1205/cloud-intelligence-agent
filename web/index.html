@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CostOp — Intelligence Agent</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#F8F9FA;--bg-panel:#FFF;--border:#E5E7EB;--border-light:#F3F4F6;--text:#111827;--text-muted:#6B7280;--text-faint:#9CA3AF;--input-border:#D1D5DB;--btn-bg:#111827;--btn-text:#FFF;--card-bg:#FFF;--card-danger-bg:#FEF2F2;--hover-bg:#F9FAFB;--date-header-bg:#F3F4F6;--accent:#E65100;--shadow:0 2px 4px rgba(0,0,0,.1);--shadow-lg:0 4px 8px rgba(0,0,0,.12)}
+[data-theme="dark"]{--bg:#0D1017;--bg-panel:#161B22;--border:#30363D;--border-light:#21262D;--text:#E6EDF3;--text-muted:#8B949E;--text-faint:#6E7681;--input-border:#30363D;--btn-bg:#F0883E;--btn-text:#FFF;--card-bg:#1C2128;--card-danger-bg:#3D1F1F;--hover-bg:#21262D;--date-header-bg:#21262D;--accent:#F0883E;--shadow:0 2px 4px rgba(0,0,0,.3);--shadow-lg:0 4px 8px rgba(0,0,0,.4)}
+body{font-family:'Space Grotesk',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column}
+header{height:60px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:var(--bg-panel);flex-shrink:0}.brand{font-family:'JetBrains Mono',monospace;font-weight:800;font-size:20px}.accent{color:#E65100}.tag{font-size:13px;color:var(--text-faint);font-weight:500;margin-left:8px}.status-dot{width:9px;height:9px;border-radius:50%;background:#10B981;display:inline-block;margin-right:6px}
+.dark-toggle{background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:14px;cursor:pointer;color:var(--text-muted);font-family:inherit}.dark-toggle:hover{border-color:#E65100;color:#E65100}
+.model-select{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;color:var(--text-muted);font-family:inherit;cursor:pointer}.model-select:focus{outline:none;border-color:var(--accent)}
+.cost-widget{font-size:10px;color:var(--text-faint);margin-left:12px;padding:3px 8px;border:1px solid var(--border);border-radius:4px;font-family:'JetBrains Mono',monospace}
+.container{flex:1;display:flex;overflow:hidden}
+.left-panel{width:360px;border-right:1px solid var(--border);background:var(--bg-panel);display:flex;flex-direction:column}.left-panel h2{padding:14px 18px;font-size:13px;color:var(--text);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border-light);font-weight:700}.alert-list{flex:1;overflow-y:auto;padding:6px 10px}.alert-item{padding:10px 14px;border-radius:8px;margin-bottom:6px;cursor:pointer;border:1px solid var(--border);transition:all .1s;background:var(--card-bg);box-shadow:var(--shadow)}.alert-item:hover{background:var(--hover-bg);border-color:var(--accent);box-shadow:var(--shadow-lg)}.alert-item .severity{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px}.severity.critical{background:#EF4444}.severity.warning{background:#F59E0B}.severity.info{background:#3B82F6}.alert-item .title{font-size:12px;font-weight:600;margin-bottom:2px}.alert-item .meta{font-size:10px;color:var(--text-faint)}
+.right-panel{flex:1;display:flex;flex-direction:column;background:var(--bg)}
+.chat-area{flex:1;overflow-y:auto;padding:20px 24px}
+.msg{margin-bottom:12px;display:flex}.msg.user{justify-content:flex-end}.bubble{max-width:80%;padding:10px 14px;font-size:13px;line-height:1.5}.msg.user .bubble{background:var(--btn-bg);color:var(--btn-text);border-radius:12px 12px 4px 12px}
+.typing{display:none;padding:8px 24px;font-size:12px;color:var(--text-muted)}.typing.active{display:flex;align-items:center;gap:8px}
+.typing-dots{display:flex;gap:3px}.typing-dots span{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:bounce .6s infinite alternate}.typing-dots span:nth-child(2){animation-delay:.2s}.typing-dots span:nth-child(3){animation-delay:.4s}
+@keyframes bounce{to{opacity:.3;transform:translateY(-3px)}}
+.progress-trail{padding:8px 24px 12px;display:none;max-height:280px;overflow-y:auto}.progress-trail.active{display:block}
+.trail-step{position:relative;padding:0 0 16px 24px;font-size:12px;line-height:1.4}
+.trail-step::before{content:'';position:absolute;left:5px;top:14px;bottom:0;width:1px;background:var(--border)}
+.trail-step:last-child::before{display:none}
+.trail-dot{position:absolute;left:0;top:4px;width:11px;height:11px;border-radius:50%;border:2px solid var(--border);background:var(--bg-panel)}
+.trail-step.active .trail-dot{border-color:var(--accent);background:var(--accent);box-shadow:0 0 6px var(--accent)}
+.trail-step.done .trail-dot{border-color:#10B981;background:#10B981}
+.trail-step.done::before{background:#10B981}
+.trail-label{font-weight:500;color:var(--text)}.trail-step.active .trail-label{color:var(--accent)}
+.trail-finding{margin-top:3px;font-size:11px;color:var(--text-muted);padding:4px 8px;background:var(--hover-bg);border-radius:4px;border-left:2px solid #10B981}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.trail-step.active .trail-dot{animation:pulse 1.2s infinite}
+.input-bar{padding:10px 20px 14px;border-top:2px solid var(--border);background:var(--bg-panel);display:flex;gap:8px;box-shadow:0 -2px 8px rgba(0,0,0,.06)}.input-bar input{flex:1;border:1px solid var(--input-border);border-radius:10px;padding:10px 14px;font-size:13px;font-family:inherit;outline:none;background:var(--bg);color:var(--text);box-shadow:inset 0 1px 3px rgba(0,0,0,.05)}.input-bar input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(240,136,62,.15)}.input-bar button{padding:10px 16px;border-radius:10px;border:none;background:var(--btn-bg);color:var(--btn-text);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:var(--shadow)}.input-bar button:disabled{background:var(--input-border);box-shadow:none}
+.login-overlay{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:100}.login-box{background:var(--bg-panel);padding:36px;border-radius:12px;border:1px solid var(--border);width:320px;text-align:center}.login-box h2{font-family:'JetBrains Mono',monospace;font-weight:800;font-size:22px;margin-bottom:4px}.login-box p{color:var(--text-muted);font-size:12px;margin-bottom:18px}.login-box input{width:100%;padding:9px 12px;border:1px solid var(--input-border);border-radius:8px;font-size:13px;margin-bottom:10px;outline:none;font-family:inherit;background:var(--bg);color:var(--text)}.login-box button{width:100%;padding:9px;border:none;background:var(--btn-bg);color:var(--btn-text);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}.login-box .error{background:#FEF2F2;color:#DC2626;padding:6px;border-radius:6px;font-size:11px;margin-bottom:10px;display:none}
+.empty-state{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--text-faint);padding:40px}.empty-state h3{font-size:15px;color:var(--text);margin-bottom:6px}.empty-state p{font-size:12px}
+.new-btn{margin:10px 14px;padding:9px;border:1px dashed var(--input-border);border-radius:8px;text-align:center;font-size:11px;color:var(--text-muted);cursor:pointer;font-family:inherit}.new-btn:hover{border-color:#E65100;color:#E65100}
+.section-label{padding:10px 14px 4px;font-size:12px;color:var(--text);font-weight:700;text-transform:uppercase;letter-spacing:.3px;border-top:1px solid var(--border);margin-top:8px}
+.date-events{}.hidden{display:none}
+.date-header{background:var(--date-header-bg);padding:12px 14px 10px;font-size:13px;font-weight:700;color:var(--text);border-top:2px solid var(--border);margin-top:8px;border-radius:4px;cursor:pointer;letter-spacing:.3px}.date-header:hover{color:var(--accent)}
+.tree-children{margin-top:6px;padding-left:14px;border-left:2px solid var(--border)}.tree-child{font-size:11px;color:var(--text-muted);padding:6px 0;border-bottom:1px solid var(--border-light);display:flex;justify-content:space-between;align-items:center}.tree-child:last-child{border-bottom:none}
+.tree-section{padding-left:14px;border-left:2px solid var(--border);margin-left:10px}
+.tree-section>.section-label{font-size:13px;font-weight:700;padding:8px 10px;margin:6px 0 2px;background:var(--date-header-bg);border-radius:4px;border-top:none;color:var(--text)}
+.investigate-btn{padding:4px 10px;font-size:10px;font-weight:600;border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:5px;cursor:pointer;font-family:inherit;transition:all .1s;white-space:nowrap}.investigate-btn:hover{background:var(--accent);color:#FFF}
+/* Structured response styles */
+.investigation-result{padding:16px;border:1px solid var(--border-light);border-radius:10px;background:var(--bg-panel)}
+.result-summary{background:var(--card-bg);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:14px 16px;font-size:14px;font-weight:500;margin-bottom:16px;line-height:1.5;box-shadow:var(--shadow)}
+.result-section{margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border-light)}.result-section:last-child{border-bottom:none;padding-bottom:0}.result-section h4{font-size:12px;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px}
+.findings-grid{display:flex;flex-wrap:wrap;gap:8px}.finding-card{background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;line-height:1.4;flex:1;min-width:200px;box-shadow:var(--shadow)}.finding-card.danger{border-left:3px solid #EF4444;background:var(--card-danger-bg)}
+.action-buttons{display:flex;flex-wrap:wrap;gap:8px}.action-btn{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .1s;color:var(--text);box-shadow:var(--shadow)}.action-btn:hover{border-color:var(--accent);background:var(--hover-bg);box-shadow:var(--shadow-lg)}.action-btn.destructive{border-color:#FCA5A5;color:#DC2626}.action-btn.destructive:hover{background:var(--card-danger-bg)}
+.timeline{border-left:2px solid var(--border);padding-left:16px;margin-left:8px;display:table;width:100%}.timeline-item{display:table-row}.timeline-item .tl-time,.timeline-item .tl-event{display:table-cell;padding:9px 0;border-bottom:1px solid var(--border-light);vertical-align:top}.tl-time{color:var(--text-muted);font-family:'JetBrains Mono',monospace;font-size:11px;width:110px;min-width:110px;padding-right:14px;white-space:nowrap;text-align:left}.tl-event{color:var(--text)}
+.raw-response{background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:1.7}.raw-response code{background:var(--date-header-bg);padding:1px 5px;border-radius:3px;font-size:11px;font-family:'JetBrains Mono',monospace}.raw-response h3{font-size:14px;margin:12px 0 6px}.raw-response h4{font-size:13px;margin:10px 0 4px}
+.msg.agent .bubble{max-width:90%;width:100%;position:relative}
+.copy-btn{display:block;margin-top:12px;margin-left:auto;background:var(--date-header-bg);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer;color:var(--text-muted);box-shadow:var(--shadow)}.copy-btn:hover{background:var(--accent);color:#FFF;border-color:var(--accent)}
+.badge{background:#EF4444;color:#FFF;font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px}
+.stop-btn{display:none;padding:6px 12px;border-radius:8px;border:1px solid #EF4444;background:transparent;color:#EF4444;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}.stop-btn:hover{background:#EF4444;color:#FFF}.stop-btn.active{display:inline-block}
+.left-panel.highlight{animation:panelFlash .6s ease 2}
+@keyframes panelFlash{0%,100%{border-right-color:var(--border)}50%{border-right-color:#E65100}}
+.mobile-toggle{display:none;background:none;border:none;font-size:18px;cursor:pointer;margin-right:8px;color:var(--text)}
+@media(max-width:768px){
+  .left-panel{position:fixed;left:-320px;top:56px;bottom:0;z-index:50;transition:left .2s;box-shadow:2px 0 8px rgba(0,0,0,.1)}
+  .left-panel.panel-open{left:0}
+  .mobile-toggle{display:inline-block}
+  .findings-grid{flex-direction:column}
+  .finding-card{min-width:auto}
+}
+.tab-nav{display:flex;gap:2px;background:var(--bg);border-radius:8px;padding:2px;margin-left:12px}.tab-btn{padding:5px 14px;border:none;background:transparent;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--text-muted);transition:all .1s}.tab-btn.active{background:var(--bg-panel);color:var(--text);box-shadow:var(--shadow)}.tab-btn:hover:not(.active){color:var(--accent)}
+.usage-panel{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow:hidden}
+.usage-header{padding:16px 24px;border-bottom:1px solid var(--border);background:var(--bg-panel)}
+.usage-controls{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.usage-summary{display:flex;gap:16px;flex-wrap:wrap}
+.usage-stat{background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:140px;box-shadow:var(--shadow)}.usage-stat .stat-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px}.usage-stat .stat-value{font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-top:2px}.usage-stat .stat-value.danger{color:#EF4444}.usage-stat .stat-value.warning{color:#F59E0B}
+.usage-table-wrap{flex:1;overflow:auto;padding:16px 24px}
+.usage-table{width:100%;border-collapse:collapse;font-size:13px}.usage-table th{text-align:left;padding:10px 14px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;border-bottom:2px solid var(--border);font-weight:600;position:sticky;top:0;background:var(--bg)}.usage-table td{padding:10px 14px;border-bottom:1px solid var(--border-light);font-family:'JetBrains Mono',monospace;font-size:12px}.usage-table tr:hover td{background:var(--hover-bg)}.usage-table .model-name{font-family:'Space Grotesk',sans-serif;font-weight:500;color:var(--text)}.usage-table .cost-cell{font-weight:600;color:var(--accent)}
+.usage-footer{padding:12px 24px;border-top:1px solid var(--border);font-size:11px;color:var(--text-faint);background:var(--bg-panel)}
+.usage-loading{text-align:center;padding:40px;color:var(--text-muted);font-size:13px}
+</style>
+</head>
+<body>
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>COST<span class="accent">OP</span></h2>
+    <p>Intelligence Agent</p>
+    <div class="error" id="loginError"></div>
+    <div id="loginForm">
+      <input type="text" id="emailInput" placeholder="Username" value="admin"/>
+      <input type="password" id="passInput" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()"/>
+      <button onclick="doLogin()">Sign In</button>
+      <p style="margin-top:12px;font-size:11px;color:var(--text-muted);cursor:pointer;text-decoration:underline" onclick="document.getElementById('loginForm').style.display='none';document.getElementById('resetForm').style.display='block'">Forgot password?</p>
+    </div>
+    <div id="resetForm" style="display:none">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Enter username to receive a reset code via email</p>
+      <input type="text" id="resetUser" placeholder="Username" value="admin"/>
+      <button onclick="doForgotPassword()">Send Reset Code</button>
+      <input type="text" id="resetCode" placeholder="Code from email" style="display:none;margin-top:10px"/>
+      <input type="password" id="resetNewPass" placeholder="New password" style="display:none;margin-top:10px"/>
+      <button id="resetConfirmBtn" onclick="doResetConfirm()" style="display:none;margin-top:10px">Confirm New Password</button>
+      <p style="margin-top:12px;font-size:11px;color:var(--text-muted);cursor:pointer;text-decoration:underline" onclick="document.getElementById('resetForm').style.display='none';document.getElementById('loginForm').style.display='block'">Back to login</p>
+    </div>
+    <div id="newPassForm" style="display:none">
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Please set a new password</p>
+      <input type="password" id="newPassInput" placeholder="New password"/>
+      <input type="password" id="confirmPassInput" placeholder="Confirm password" onkeydown="if(event.key==='Enter')doNewPassword()"/>
+      <button onclick="doNewPassword()">Set Password</button>
+    </div>
+    <p style="margin-top:18px;font-size:9px;color:var(--text-faint);opacity:0.5">created by amitml</p>
+  </div>
+</div>
+<header>
+  <div style="display:flex;align-items:center;gap:16px"><button class="mobile-toggle" onclick="togglePanel()">☰</button><span class="brand">COST<span class="accent">OP</span></span><nav class="tab-nav"><button class="tab-btn active" data-tab="chat" onclick="switchTab('chat')">Agent</button><button class="tab-btn" data-tab="usage" onclick="switchTab('usage')">Usage</button></nav></div>
+  <div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:12px"><select id="modelSelect" class="model-select"><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option></select><button class="dark-toggle" onclick="toggleDark()">🌙</button><span class="status-dot"></span>Live<span id="alertBadge" class="badge" style="display:none;cursor:pointer" onclick="openAlertPanel()">🔔 0</span></div>
+</header>
+<div class="container">
+  <div class="left-panel">
+    <h2>Live Alerts</h2>
+    <div class="new-btn" onclick="newChat()">+ New Investigation</div>
+    <div class="alert-list" id="alertList"><div style="padding:16px;color:#9CA3AF;font-size:12px">Login to load alerts</div></div>
+  </div>
+  <div class="right-panel">
+    <div class="chat-area" id="chatArea">
+      <div class="empty-state"><h3>Select an alert or start an investigation</h3><p>Click an alert to investigate, or type a question below.</p></div>
+    </div>
+    <div class="typing" id="typing"><div class="typing-dots"><span></span><span></span><span></span></div><span id="typingText">Investigating...</span></div>
+    <div class="progress-trail" id="progressTrail"></div>
+    <div class="input-bar">
+      <input type="text" id="input" placeholder="Ask about costs, agents, anomalies..." autocomplete="off" onkeydown="if(event.key==='Enter')send()">
+      <button onclick="send()" id="btn">Send</button>
+      <button class="stop-btn" id="stopBtn" onclick="stopGeneration()">Stop</button>
+    </div>
+  </div>
+</div>
+<!-- Usage Tab (bedrock-lens style) -->
+<div class="usage-panel" id="usagePanel" style="display:none">
+  <div class="usage-header">
+    <div class="usage-controls">
+      <select id="usageRange" class="model-select" onchange="loadUsageData()">
+        <option value="30m">Last 30 min</option>
+        <option value="1h">Last 1 hour</option>
+        <option value="6h">Last 6 hours</option>
+        <option value="today" selected>Today</option>
+        <option value="yesterday">Yesterday</option>
+        <option value="week">This week</option>
+      </select>
+      <button class="investigate-btn" onclick="loadUsageData()" style="padding:6px 14px">Refresh</button>
+      <label style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px"><input type="checkbox" id="usageAutoRefresh" onchange="toggleUsageAutoRefresh()"> Auto (30s)</label>
+    </div>
+    <div class="usage-summary" id="usageSummary"></div>
+  </div>
+  <div class="usage-table-wrap">
+    <table class="usage-table" id="usageTable">
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Invocations</th>
+          <th>Input Tokens</th>
+          <th>Output Tokens</th>
+          <th>Total Tokens</th>
+          <th>Est. Cost</th>
+        </tr>
+      </thead>
+      <tbody id="usageBody"><tr><td colspan="6" style="text-align:center;color:var(--text-faint);padding:40px">Login to load usage data</td></tr></tbody>
+    </table>
+  </div>
+  <div class="usage-footer" id="usageFooter"></div>
+</div>
+<script type="module" src="/main.js"></script>
+<script type="module" src="/usage.js"></script>
+<div style="position:fixed;bottom:8px;left:12px;font-size:10px;color:var(--text-faint);opacity:0.6">created by amitml</div>
+</body>
+</html>
