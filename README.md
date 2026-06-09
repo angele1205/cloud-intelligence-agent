@@ -198,10 +198,4 @@ aws cloudformation delete-stack --stack-name CostOp --region us-east-1
 | Usage tab shows "Failed to start query" | Ensure the authenticated role has `logs:StartQuery` + `logs:GetQueryResults` permissions |
 | Stack delete fails | Delete ECR repo first (see Delete section above) |
 
----
 
-## Credits
-
-- Agent framework based on [AWS FinOps Agent sample](https://github.com/aws-samples/sample-finops-agent-amazon-bedrock-agentcore)
-- Usage dashboard inspired by [bedrock-lens](https://github.com/OmarCodes022/bedrock-lens)
-- Originally created by [amitml](https://github.com/amitml)
